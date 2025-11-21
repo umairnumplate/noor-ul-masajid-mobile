@@ -1,12 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAppContext } from '../contexts/AppContext';
-import { UserGroupIcon, AcademicCapIcon, ClipboardCheckIcon, BuildingLibraryIcon, CashIcon, ExclamationTriangleIcon } from './Icons';
-import { FeeStatus } from '../types';
+import { UserGroupIcon, AcademicCapIcon, ClipboardCheckIcon, BuildingLibraryIcon, CashIcon, ExclamationTriangleIcon, SparklesIcon } from './Icons';
+import { FeeStatus, Announcement } from '../types';
+import { isGeminiAvailable } from '../lib/gemini';
+import GenerateAnnouncementModal from './GenerateAnnouncementModal';
 
 const Dashboard: React.FC = () => {
-    const { students, teachers, announcements, attendance, tanzimRecords, madrasaFeeRecords } = useAppContext();
+    const { students, teachers, announcements, setAnnouncements, attendance, tanzimRecords, madrasaFeeRecords } = useAppContext();
     const today = new Date().toISOString().split('T')[0];
     const presentToday = attendance.filter(a => a.date === today && a.status === 'Present').length;
+    const [isAiModalOpen, setIsAiModalOpen] = useState(false);
     
     const pendingMadrasaFeesAmount = useMemo(() => {
         const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
@@ -38,6 +41,16 @@ const Dashboard: React.FC = () => {
         { name: 'Pending Tanzim Fees', value: pendingTanzimFeesAmount, icon: CashIcon, color: 'text-orange-600', bgColor: 'bg-orange-100', isCurrency: true, subtext: '(Total Pending)' },
     ];
 
+    const handleGenerateAnnouncement = (announcement: { title: string, content: string }) => {
+        const newAnnouncement: Announcement = {
+            id: `anno${Date.now()}`,
+            date: new Date().toISOString(),
+            ...announcement,
+        };
+        setAnnouncements(prev => [newAnnouncement, ...prev]);
+        setIsAiModalOpen(false);
+    };
+
     return (
         <div className="space-y-8">
             <div className="bg-surface rounded-xl shadow-sm p-6 border border-stroke">
@@ -63,7 +76,18 @@ const Dashboard: React.FC = () => {
             </div>
 
             <div className="bg-surface rounded-xl shadow-sm p-6 border border-stroke">
-                <h2 className="text-2xl font-bold text-on-surface mb-4">📢 Important Announcements</h2>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-bold text-on-surface">📢 Important Announcements</h2>
+                    {isGeminiAvailable() && (
+                        <button
+                            onClick={() => setIsAiModalOpen(true)}
+                            className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-primary-light text-primary-darker font-bold rounded-lg shadow-sm hover:bg-teal-300 transition-all transform hover:scale-105"
+                        >
+                            <SparklesIcon className="h-5 w-5" />
+                            Generate with AI
+                        </button>
+                    )}
+                </div>
                 <div className="space-y-4 max-h-96 overflow-y-auto">
                     {announcements.length > 0 ? (
                         announcements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(anno => (
@@ -80,6 +104,7 @@ const Dashboard: React.FC = () => {
                     )}
                 </div>
             </div>
+            {isAiModalOpen && <GenerateAnnouncementModal onClose={() => setIsAiModalOpen(false)} onGenerate={handleGenerateAnnouncement} />}
         </div>
     );
 };

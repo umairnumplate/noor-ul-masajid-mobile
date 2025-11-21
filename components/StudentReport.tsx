@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppContext } from '../contexts/AppContext';
 import { AttendanceStatus } from '../types';
 import WhatsappLink from './WhatsappLink';
-import { WhatsAppIcon } from './Icons';
+import { WhatsAppIcon, SparklesIcon } from './Icons';
+import { runGemini, isGeminiAvailable } from '../lib/gemini';
 
 const StudentReport: React.FC = () => {
     const { studentId } = useParams<{ studentId: string }>();
     const { students, classes, attendance } = useAppContext();
+    const [aiSummary, setAiSummary] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
 
     const student = students.find(s => s.id === studentId);
     const studentClass = classes.find(c => c.id === student?.classId);
@@ -31,10 +34,11 @@ const StudentReport: React.FC = () => {
     const leaveDays = studentAttendance.filter(a => a.status === AttendanceStatus.Leave).length;
     const attendancePercentage = totalDays > 0 ? ((presentDays / totalDays) * 100).toFixed(1) : 'N/A';
 
-    const reportText = `*Noor ul Masajid Student Report*\n\n*Name:* ${student.name}\n*Class:* ${studentClass?.name || 'N/A'}\n\n*Attendance Summary:*\n- Present: ${presentDays}\n- Absent: ${absentDays}\n- Leave: ${leaveDays}\n- Percentage: ${attendancePercentage}%\n\n*Remarks:* Excellent progress this term.\n\n_This is an auto-generated report._`;
+    const defaultRemark = `${student.name} has shown excellent progress this term. Consistent effort and participation in class activities are highly appreciated.`;
+
+    const reportText = `*Noor ul Masajid Student Report*\n\n*Name:* ${student.name}\n*Class:* ${studentClass?.name || 'N/A'}\n\n*Attendance Summary:*\n- Present: ${presentDays}\n- Absent: ${absentDays}\n- Leave: ${leaveDays}\n- Percentage: ${attendancePercentage}%\n\n*Remarks:* ${aiSummary || defaultRemark}\n\n_This is an auto-generated report._`;
 
     const handleShare = () => {
-        // Basic formatting for Pakistani numbers: remove non-numeric chars, and replace a leading 0 with the country code 92.
         let formattedPhone = student.phone.replace(/[^0-9]/g, ''); 
         if (formattedPhone.startsWith('03')) {
             formattedPhone = '92' + formattedPhone.substring(1);
@@ -43,6 +47,30 @@ const StudentReport: React.FC = () => {
         }
         const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(reportText)}`;
         window.open(whatsappUrl, '_blank');
+    };
+
+    const handleGenerateSummary = async () => {
+        if (!student || !studentClass) return;
+        setIsGenerating(true);
+        const prompt = `
+            Generate a brief, personalized performance remark for a student named ${student.name}.
+            The student is in class ${studentClass.name} at Noor ul Masajid Islamic Education System.
+            Here is their attendance record summary:
+            - Total Days Tracked: ${totalDays}
+            - Present: ${presentDays} days
+            - Absent: ${absentDays} days
+            - Leave: ${leaveDays} days
+            - Attendance Percentage: ${attendancePercentage}%
+
+            Based on this data, write a short (2-3 sentences), encouraging, and professional remark suitable for a parent-facing report.
+            If attendance is good (>=85%), praise their consistency.
+            If attendance is average (60-84%), encourage them to attend more regularly.
+            If attendance is poor (<60%), mention it constructively and suggest improvement.
+            Start the remark by addressing the student's progress.
+        `;
+        const summary = await runGemini('gemini-3-pro-preview', prompt);
+        setAiSummary(summary);
+        setIsGenerating(false);
     };
 
     return (
@@ -84,9 +112,21 @@ const StudentReport: React.FC = () => {
                     </div>
 
                     <div>
-                        <h3 className="text-lg font-semibold text-on-surface border-b pb-2 mb-4">Management Remarks</h3>
-                        <p className="p-4 bg-gray-100 rounded-lg text-gray-700 italic">
-                            {student.name} has shown excellent progress this term. Consistent effort and participation in class activities are highly appreciated.
+                        <div className="flex justify-between items-center border-b pb-2 mb-4">
+                            <h3 className="text-lg font-semibold text-on-surface">Management Remarks</h3>
+                            {isGeminiAvailable() && (
+                                <button 
+                                    onClick={handleGenerateSummary} 
+                                    disabled={isGenerating}
+                                    className="inline-flex items-center gap-2 px-3 py-1 text-xs bg-primary/10 text-primary font-bold rounded-full hover:bg-primary/20 disabled:opacity-50"
+                                >
+                                    <SparklesIcon className="h-4 w-4" />
+                                    {isGenerating ? 'Generating...' : 'Generate AI Summary'}
+                                </button>
+                            )}
+                        </div>
+                        <p className="p-4 bg-gray-100 rounded-lg text-gray-700 italic min-h-[80px]">
+                            {isGenerating ? 'Please wait...' : (aiSummary || defaultRemark)}
                         </p>
                     </div>
                 </div>

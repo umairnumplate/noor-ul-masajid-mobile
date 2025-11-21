@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../contexts/AppContext';
-import { PaperAirplaneIcon, WhatsAppIcon } from './Icons';
+import { PaperAirplaneIcon, WhatsAppIcon, SparklesIcon } from './Icons';
+import { isGeminiAvailable, runGemini } from '../lib/gemini';
 
 interface BulkMessageModalProps {
     onClose: () => void;
@@ -11,6 +12,8 @@ const BulkMessageModal: React.FC<BulkMessageModalProps> = ({ onClose, selectedSt
     const { students } = useAppContext();
     const [message, setMessage] = useState('');
     const [copyStatus, setCopyStatus] = useState('');
+    const [aiPrompt, setAiPrompt] = useState('');
+    const [isDrafting, setIsDrafting] = useState(false);
 
     const selectedStudents = useMemo(() => {
         return students.filter(s => selectedStudentIds.includes(s.id));
@@ -34,6 +37,20 @@ const BulkMessageModal: React.FC<BulkMessageModalProps> = ({ onClose, selectedSt
         });
     };
 
+    const handleDraftWithAi = async () => {
+        if (!aiPrompt) return;
+        setIsDrafting(true);
+        const fullPrompt = `
+          You are an administrator for an Islamic education system named "Noor ul Masajid".
+          Draft a concise and polite message to be sent to the parents/guardians of students.
+          The message should be about: "${aiPrompt}".
+          Keep it short and suitable for SMS or WhatsApp. Do not include a greeting or signature.
+        `;
+        const draftedMessage = await runGemini('gemini-2.5-flash', fullPrompt);
+        setMessage(draftedMessage);
+        setIsDrafting(false);
+    };
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center" onClick={onClose}>
             <div className="bg-surface rounded-xl shadow-2xl p-6 md:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
@@ -49,6 +66,31 @@ const BulkMessageModal: React.FC<BulkMessageModalProps> = ({ onClose, selectedSt
                             {selectedStudents.map(s => s.name).join(', ')}
                         </div>
                     </div>
+                    
+                    {isGeminiAvailable() && (
+                        <div className="space-y-2">
+                             <label htmlFor="ai-prompt" className="block text-sm font-medium text-gray-700">Draft with AI</label>
+                             <div className="flex gap-2">
+                                <input
+                                    id="ai-prompt"
+                                    type="text"
+                                    className="flex-grow p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
+                                    value={aiPrompt}
+                                    onChange={(e) => setAiPrompt(e.target.value)}
+                                    placeholder="e.g., remind about fee deadline tomorrow"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleDraftWithAi}
+                                    disabled={isDrafting || !aiPrompt}
+                                    className="px-4 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-dark flex items-center justify-center gap-2 disabled:bg-primary/50"
+                                >
+                                    <SparklesIcon className="h-5 w-5" />
+                                    {isDrafting ? 'Drafting...' : 'Draft'}
+                                </button>
+                             </div>
+                        </div>
+                    )}
 
                     <div>
                         <label htmlFor="bulk-message" className="block text-sm font-medium text-gray-700">Message</label>

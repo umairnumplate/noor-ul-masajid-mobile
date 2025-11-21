@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Teacher } from '../types';
-import { PhotographIcon } from './Icons';
+import { PhotographIcon, SparklesIcon } from './Icons';
+import { isGeminiAvailable, runGemini } from '../lib/gemini';
 
 interface AddTeacherModalProps {
     onClose: () => void;
@@ -11,6 +12,7 @@ interface AddTeacherModalProps {
 const AddTeacherModal: React.FC<AddTeacherModalProps> = ({ onClose, onSave, teacherToEdit }) => {
     const [preview, setPreview] = useState<string | null>(null);
     const isEditing = !!teacherToEdit;
+    const [isSuggesting, setIsSuggesting] = useState(false);
 
     const [formData, setFormData] = useState<Omit<Teacher, 'id' | 'timetable'>>({
         name: '',
@@ -46,6 +48,24 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({ onClose, onSave, teac
             };
             reader.readAsDataURL(file);
         }
+    };
+
+    const handleSuggestQualifications = async () => {
+        if (!formData.name) {
+            setErrors(prev => ({ ...prev, qualifications: "Enter teacher's name first to get suggestions." }));
+            return;
+        }
+        setIsSuggesting(true);
+        const prompt = `
+          Generate a concise, single-line suggestion for the qualifications of a teacher in an Islamic education system.
+          The teacher's name is ${formData.name}.
+          Example output: "PhD in Islamic Studies, Wafaq ul Madaris" or "Certified Qari, 10 Qiraat".
+          Keep it brief and professional.
+        `;
+        const suggestion = await runGemini('gemini-2.5-flash', prompt);
+        setFormData(prev => ({ ...prev, qualifications: suggestion }));
+        setErrors(prev => ({...prev, qualifications: undefined}));
+        setIsSuggesting(false);
     };
 
     const validate = () => {
@@ -92,7 +112,20 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({ onClose, onSave, teac
                         {errors.contact && <p className="text-red-500 text-xs mt-1">{errors.contact}</p>}
                     </div>
                     <div>
-                        <label htmlFor="qualifications" className="block text-sm font-medium text-gray-700">Qualifications</label>
+                        <div className="flex justify-between items-center">
+                            <label htmlFor="qualifications" className="block text-sm font-medium text-gray-700">Qualifications</label>
+                            {isGeminiAvailable() && (
+                                <button
+                                    type="button"
+                                    onClick={handleSuggestQualifications}
+                                    disabled={isSuggesting}
+                                    className="text-xs inline-flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
+                                >
+                                    <SparklesIcon className="h-3 w-3" />
+                                    {isSuggesting ? 'Suggesting...' : 'Suggest with AI'}
+                                </button>
+                            )}
+                        </div>
                         <textarea name="qualifications" id="qualifications" value={formData.qualifications} onChange={handleChange} rows={3} className={`mt-1 block w-full p-2 border ${errors.qualifications ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:ring-primary focus:border-primary`} required></textarea>
                         {errors.qualifications && <p className="text-red-500 text-xs mt-1">{errors.qualifications}</p>}
                     </div>
